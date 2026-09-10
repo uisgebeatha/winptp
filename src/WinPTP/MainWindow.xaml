@@ -28,6 +28,7 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <TextBlock Margin="0,0,10,0"
@@ -46,9 +47,15 @@
                     Content="Refresh" />
             <Button x:Name="CheckPrinterButton"
                     Grid.Column="3"
+                    Margin="0,0,8,0"
                     Padding="12,5"
                     Click="CheckPrinterButton_Click"
                     Content="Check Printer" />
+            <Button x:Name="PrintTestButton"
+                    Grid.Column="4"
+                    Padding="12,5"
+                    Click="PrintTestButton_Click"
+                    Content="Print Test" />
         </Grid>
 
         <Border Grid.Row="2"

@@ -2,6 +2,7 @@
 using System.IO;
 using System.Windows;
 using WinPTP.Printer;
+using WinPTP.Rendering;
 
 namespace WinPTP;
 
@@ -75,6 +76,85 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void PrintTestButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (PortComboBox.SelectedItem is not string portName)
+        {
+            StatusTextBlock.Text = "Select a COM port before printing the test label.";
+            return;
+        }
+
+        SetControlsEnabled(false);
+        StatusTextBlock.Text = $"Preparing \"{TestLabelRasterizer.LabelText}\" for {portName}...";
+
+        try
+        {
+            LabelRaster raster = TestLabelRasterizer.Render();
+            PtP300BtPrintResult result = await Task.Run(() => PtP300BtClient.Print(portName, raster));
+
+            switch (result.Outcome)
+            {
+                case PtP300BtPrintOutcome.PrintingCompleted:
+                    StatusTextBlock.Text =
+                        $"Printed \"{TestLabelRasterizer.LabelText}\" successfully on {portName}.\n" +
+                        $"Printer: {result.Description}";
+                    break;
+                case PtP300BtPrintOutcome.Printing:
+                    StatusTextBlock.Text =
+                        $"Print command sent to {portName}. Printer: {result.Description}. " +
+                        "Completion status was not received before the wait expired.";
+                    break;
+                case PtP300BtPrintOutcome.PrinterError:
+                    StatusTextBlock.Text = $"Test print failed on {portName}: {result.Description}.";
+                    break;
+                case PtP300BtPrintOutcome.CompletionStatusNotReceived:
+                    StatusTextBlock.Text =
+                        $"Print command sent to {portName}, but completion status was not received before the wait expired.";
+                    break;
+                default:
+                    StatusTextBlock.Text =
+                        $"Print command sent to {portName}. {result.Description}. Completion was not confirmed.";
+                    break;
+            }
+        }
+        catch (PtP300BtPrintException ex)
+        {
+            StatusTextBlock.Text = $"Test print failed on {portName}: {ex.Message}";
+        }
+        catch (PtP300BtResponseException ex)
+        {
+            StatusTextBlock.Text = $"Test print failed on {portName}: {ex.Message}";
+        }
+        catch (TimeoutException ex)
+        {
+            StatusTextBlock.Text = $"Test print timed out on {portName}: {ex.Message}";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            StatusTextBlock.Text = $"Cannot open {portName}. The port may be in use or access was denied.";
+        }
+        catch (IOException ex)
+        {
+            StatusTextBlock.Text = $"Serial communication failed on {portName}: {ex.Message}";
+        }
+        catch (InvalidOperationException ex)
+        {
+            StatusTextBlock.Text = $"Cannot use {portName}: {ex.Message}";
+        }
+        catch (ArgumentException ex)
+        {
+            StatusTextBlock.Text = $"Cannot use {portName}: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            StatusTextBlock.Text = $"Test print failed on {portName}: {ex.Message}";
+        }
+        finally
+        {
+            SetControlsEnabled(true);
+        }
+    }
+
     private void RefreshPorts()
     {
         string? previousSelection = PortComboBox.SelectedItem as string;
@@ -109,6 +189,7 @@ public partial class MainWindow : Window
         PortComboBox.IsEnabled = isEnabled;
         RefreshButton.IsEnabled = isEnabled;
         CheckPrinterButton.IsEnabled = isEnabled;
+        PrintTestButton.IsEnabled = isEnabled;
     }
 
     private static string FormatStatus(string portName, PtP300BtStatus status)
