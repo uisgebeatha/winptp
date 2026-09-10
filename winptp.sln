@@ -7,6 +7,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WinPTP", "src\WinPTP\WinPTP.csproj", "{1F8606F8-062C-4FC5-990E-640854B95375}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{A6974506-7AC8-48EC-A11E-DFF6560B3276}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WinPTP.Tests", "tests\WinPTP.Tests\WinPTP.Tests.csproj", "{ED0DC81E-BA08-4376-B552-B3CFD600D426}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -29,11 +33,24 @@ Global
 		{1F8606F8-062C-4FC5-990E-640854B95375}.Release|x64.Build.0 = Release|Any CPU
 		{1F8606F8-062C-4FC5-990E-640854B95375}.Release|x86.ActiveCfg = Release|Any CPU
 		{1F8606F8-062C-4FC5-990E-640854B95375}.Release|x86.Build.0 = Release|Any CPU
+		{ED0DC81E-BA08-4376-B552-B3CFD600D426}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ED0DC81E-BA08-4376-B552-B3CFD600D426}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ED0DC81E-BA08-4376-B552-B3CFD600D426}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{ED0DC81E-BA08-4376-B552-B3CFD600D426}.Debug|x64.Build.0 = Debug|Any CPU
+		{ED0DC81E-BA08-4376-B552-B3CFD600D426}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{ED0DC81E-BA08-4376-B552-B3CFD600D426}.Debug|x86.Build.0 = Debug|Any CPU
+		{ED0DC81E-BA08-4376-B552-B3CFD600D426}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ED0DC81E-BA08-4376-B552-B3CFD600D426}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ED0DC81E-BA08-4376-B552-B3CFD600D426}.Release|x64.ActiveCfg = Release|Any CPU
+		{ED0DC81E-BA08-4376-B552-B3CFD600D426}.Release|x64.Build.0 = Release|Any CPU
+		{ED0DC81E-BA08-4376-B552-B3CFD600D426}.Release|x86.ActiveCfg = Release|Any CPU
+		{ED0DC81E-BA08-4376-B552-B3CFD600D426}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{1F8606F8-062C-4FC5-990E-640854B95375} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{ED0DC81E-BA08-4376-B552-B3CFD600D426} = {A6974506-7AC8-48EC-A11E-DFF6560B3276}
 	EndGlobalSection
 EndGlobal

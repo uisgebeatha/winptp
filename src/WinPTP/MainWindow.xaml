@@ -5,8 +5,60 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:WinPTP"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        Title="WinPTP Printer Check"
+        Height="280"
+        Width="520"
+        MinHeight="250"
+        MinWidth="460"
+        Loaded="MainWindow_Loaded">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
+        <TextBlock FontSize="18"
+                   FontWeight="SemiBold"
+                   Text="PT-P300BT connection check" />
+
+        <Grid Grid.Row="1" Margin="0,16,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Margin="0,0,10,0"
+                       VerticalAlignment="Center"
+                       Text="COM port:" />
+            <ComboBox x:Name="PortComboBox"
+                      Grid.Column="1"
+                      MinWidth="130"
+                      Margin="0,0,8,0"
+                      VerticalContentAlignment="Center" />
+            <Button x:Name="RefreshButton"
+                    Grid.Column="2"
+                    Margin="0,0,8,0"
+                    Padding="12,5"
+                    Click="RefreshButton_Click"
+                    Content="Refresh" />
+            <Button x:Name="CheckPrinterButton"
+                    Grid.Column="3"
+                    Padding="12,5"
+                    Click="CheckPrinterButton_Click"
+                    Content="Check Printer" />
+        </Grid>
+
+        <Border Grid.Row="2"
+                Padding="12"
+                BorderBrush="#FFC8C8C8"
+                BorderThickness="1"
+                CornerRadius="3">
+            <TextBlock x:Name="StatusTextBlock"
+                       Text="Select a COM port, then check the printer."
+                       TextWrapping="Wrap" />
+        </Border>
     </Grid>
 </Window>

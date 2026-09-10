@@ -1,13 +1,7 @@
 ﻿using System.Text;
+using System.IO;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+using WinPTP.Printer;
 
 namespace WinPTP;
 
@@ -19,5 +13,112 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+    }
+
+    private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        RefreshPorts();
+    }
+
+    private void RefreshButton_Click(object sender, RoutedEventArgs e)
+    {
+        RefreshPorts();
+    }
+
+    private async void CheckPrinterButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (PortComboBox.SelectedItem is not string portName)
+        {
+            StatusTextBlock.Text = "Select a COM port before checking the printer.";
+            return;
+        }
+
+        SetControlsEnabled(false);
+        StatusTextBlock.Text = $"Checking for a PT-P300BT on {portName}...";
+
+        try
+        {
+            PtP300BtStatus status = await Task.Run(() => PtP300BtClient.QueryStatus(portName));
+            StatusTextBlock.Text = FormatStatus(portName, status);
+        }
+        catch (PtP300BtResponseException ex)
+        {
+            StatusTextBlock.Text = $"Printer check failed on {portName}: {ex.Message}";
+        }
+        catch (TimeoutException ex)
+        {
+            StatusTextBlock.Text = $"Printer check timed out on {portName}: {ex.Message}";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            StatusTextBlock.Text = $"Cannot open {portName}. The port may be in use or access was denied.";
+        }
+        catch (IOException ex)
+        {
+            StatusTextBlock.Text = $"Serial communication failed on {portName}: {ex.Message}";
+        }
+        catch (InvalidOperationException ex)
+        {
+            StatusTextBlock.Text = $"Cannot use {portName}: {ex.Message}";
+        }
+        catch (ArgumentException ex)
+        {
+            StatusTextBlock.Text = $"Cannot use {portName}: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            StatusTextBlock.Text = $"Printer check failed on {portName}: {ex.Message}";
+        }
+        finally
+        {
+            SetControlsEnabled(true);
+        }
+    }
+
+    private void RefreshPorts()
+    {
+        string? previousSelection = PortComboBox.SelectedItem as string;
+
+        try
+        {
+            IReadOnlyList<string> ports = SerialPortDiscovery.GetPortNames();
+            PortComboBox.ItemsSource = ports;
+
+            if (previousSelection is not null && ports.Contains(previousSelection))
+            {
+                PortComboBox.SelectedItem = previousSelection;
+            }
+            else if (ports.Count > 0)
+            {
+                PortComboBox.SelectedIndex = 0;
+            }
+
+            StatusTextBlock.Text = ports.Count == 0
+                ? "No serial COM ports were found. Pair the printer in Windows and refresh."
+                : $"Found {ports.Count} serial COM port{(ports.Count == 1 ? string.Empty : "s")}.";
+        }
+        catch (Exception ex)
+        {
+            PortComboBox.ItemsSource = Array.Empty<string>();
+            StatusTextBlock.Text = $"Could not enumerate serial COM ports: {ex.Message}";
+        }
+    }
+
+    private void SetControlsEnabled(bool isEnabled)
+    {
+        PortComboBox.IsEnabled = isEnabled;
+        RefreshButton.IsEnabled = isEnabled;
+        CheckPrinterButton.IsEnabled = isEnabled;
+    }
+
+    private static string FormatStatus(string portName, PtP300BtStatus status)
+    {
+        StringBuilder result = new();
+        result.AppendLine("Printer: PT-P300BT");
+        result.AppendLine($"COM port: {portName}");
+        result.AppendLine($"Tape width: {status.TapeWidthMillimeters} mm");
+        result.AppendLine($"Tape/media type: {status.MediaTypeDescription} (0x{status.MediaType:X2})");
+        result.Append($"State: {status.StateDescription}");
+        return result.ToString();
     }
 }
