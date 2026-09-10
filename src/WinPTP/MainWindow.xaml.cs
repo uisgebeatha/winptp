@@ -13,10 +13,14 @@ namespace WinPTP;
 /// </summary>
 public partial class MainWindow : Window
 {
-    private readonly Typeface _labelTypeface = new("Segoe UI");
+    private const string AutoSizeMode = "Auto";
+    private const string ManualSizeMode = "Manual";
+
     private readonly TextLabelLayout _labelLayout = TextLabelLayout.TwelveMillimeter;
     private LabelRaster? _previewRaster;
     private bool _controlsEnabled = true;
+    private bool _editorControlsInitialized;
+    private bool _updatingFontSizeControl;
 
     public MainWindow()
     {
@@ -26,6 +30,7 @@ public partial class MainWindow : Window
 
     private void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
+        InitializeEditorControls();
         UpdatePreview();
         RefreshPorts();
     }
@@ -33,6 +38,41 @@ public partial class MainWindow : Window
     private void LabelTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         UpdatePreview();
+    }
+
+    private void FontComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_editorControlsInitialized)
+        {
+            UpdatePreview();
+        }
+    }
+
+    private void SizeModeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_editorControlsInitialized)
+        {
+            return;
+        }
+
+        UpdateFontSizeControlState();
+        UpdatePreview();
+    }
+
+    private void FontSizeSlider_ValueChanged(
+        object sender,
+        RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!_editorControlsInitialized || _updatingFontSizeControl)
+        {
+            return;
+        }
+
+        FontSizeValueTextBlock.Text = $"{FontSizeSlider.Value:F1}";
+        if (IsManualSizeMode)
+        {
+            UpdatePreview();
+        }
     }
 
     private void RefreshButton_Click(object sender, RoutedEventArgs e)
@@ -183,6 +223,9 @@ public partial class MainWindow : Window
             _previewRaster = null;
             PreviewImage.Source = null;
             LabelLengthTextBlock.Text = "Label length: 0.0 mm";
+            FontSizeValueTextBlock.Text = IsManualSizeMode
+                ? $"{FontSizeSlider.Value:F1}"
+                : "—";
             PreviewPlaceholderTextBlock.Text = "Enter label text to generate a preview.";
             PreviewPlaceholderTextBlock.Visibility = Visibility.Visible;
             UpdatePrintButtonState();
@@ -191,10 +234,15 @@ public partial class MainWindow : Window
 
         try
         {
-            TextLabelRenderResult rendered = TextLabelRasterizer.Render(text, _labelTypeface, _labelLayout);
+            TextLabelRenderResult rendered = TextLabelRasterizer.Render(
+                text,
+                GetSelectedTypeface(),
+                _labelLayout,
+                IsManualSizeMode ? FontSizeSlider.Value : null);
             _previewRaster = rendered.Raster;
             PreviewImage.Source = LabelRasterPreviewConverter.ToBitmapSource(rendered.Raster);
             LabelLengthTextBlock.Text = $"Label length: {rendered.Raster.LengthMillimeters:F1} mm";
+            SetEffectiveFontSize(rendered.SelectedFontSizeDots);
             PreviewPlaceholderTextBlock.Visibility = Visibility.Collapsed;
         }
         catch (Exception ex)
@@ -242,15 +290,68 @@ public partial class MainWindow : Window
     {
         _controlsEnabled = isEnabled;
         LabelTextBox.IsEnabled = isEnabled;
+        FontComboBox.IsEnabled = isEnabled;
+        SizeModeComboBox.IsEnabled = isEnabled;
         PortComboBox.IsEnabled = isEnabled;
         RefreshButton.IsEnabled = isEnabled;
         CheckPrinterButton.IsEnabled = isEnabled;
+        UpdateFontSizeControlState();
         UpdatePrintButtonState();
     }
 
     private void UpdatePrintButtonState()
     {
         PrintButton.IsEnabled = _controlsEnabled && _previewRaster is not null;
+    }
+
+    private bool IsManualSizeMode =>
+        string.Equals(SizeModeComboBox.SelectedItem as string, ManualSizeMode, StringComparison.Ordinal);
+
+    private void InitializeEditorControls()
+    {
+        if (_editorControlsInitialized)
+        {
+            return;
+        }
+
+        IReadOnlyList<InstalledFontFamily> installedFonts =
+            InstalledFontCatalog.GetInstalledFamilies();
+        FontComboBox.ItemsSource = installedFonts;
+        FontComboBox.SelectedItem = installedFonts.FirstOrDefault(font =>
+                string.Equals(font.DisplayName, "Segoe UI", StringComparison.CurrentCultureIgnoreCase))
+            ?? installedFonts.FirstOrDefault();
+
+        SizeModeComboBox.ItemsSource = new[] { AutoSizeMode, ManualSizeMode };
+        SizeModeComboBox.SelectedItem = AutoSizeMode;
+        FontSizeSlider.Maximum = _labelLayout.TextAreaHeightDots;
+        _editorControlsInitialized = true;
+        UpdateFontSizeControlState();
+    }
+
+    private Typeface GetSelectedTypeface()
+    {
+        return FontComboBox.SelectedItem is InstalledFontFamily selectedFont
+            ? selectedFont.CreateTypeface()
+            : new Typeface("Segoe UI");
+    }
+
+    private void SetEffectiveFontSize(double fontSizeDots)
+    {
+        _updatingFontSizeControl = true;
+        try
+        {
+            FontSizeSlider.Value = fontSizeDots;
+            FontSizeValueTextBlock.Text = $"{fontSizeDots:F1}";
+        }
+        finally
+        {
+            _updatingFontSizeControl = false;
+        }
+    }
+
+    private void UpdateFontSizeControlState()
+    {
+        FontSizeSlider.IsEnabled = _controlsEnabled && IsManualSizeMode;
     }
 
     private static string FormatStatus(string portName, PtP300BtStatus status)

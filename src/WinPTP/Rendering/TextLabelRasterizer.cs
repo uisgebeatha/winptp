@@ -16,16 +16,30 @@ internal static class TextLabelRasterizer
     public static TextLabelRenderResult Render(
         string text,
         Typeface typeface,
-        TextLabelLayout layout)
+        TextLabelLayout layout,
+        double? requestedFontSizeDots = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(text);
         ArgumentNullException.ThrowIfNull(typeface);
         ArgumentNullException.ThrowIfNull(layout);
 
-        (FormattedText formattedText, double fontSize) = CreateLargestFittingText(
+        if (requestedFontSizeDots is double requestedFontSize
+            && (requestedFontSize < MinimumFontSizeDots || !double.IsFinite(requestedFontSize)))
+        {
+            throw new ArgumentOutOfRangeException(nameof(requestedFontSizeDots));
+        }
+
+        (FormattedText largestFittingText, double largestFittingFontSize) = CreateLargestFittingText(
             text,
             typeface,
             layout.TextAreaHeightDots);
+        (FormattedText formattedText, double fontSize) = SelectTextSize(
+            text,
+            typeface,
+            layout.TextAreaHeightDots,
+            requestedFontSizeDots,
+            largestFittingText,
+            largestFittingFontSize);
 
         int labelLengthDots = Math.Max(
             1,
@@ -71,6 +85,25 @@ internal static class TextLabelRasterizer
         }
 
         return new TextLabelRenderResult(LabelRaster.Pack(blackPixels), fontSize);
+    }
+
+    private static (FormattedText Text, double FontSize) SelectTextSize(
+        string text,
+        Typeface typeface,
+        int maximumHeightDots,
+        double? requestedFontSizeDots,
+        FormattedText largestFittingText,
+        double largestFittingFontSize)
+    {
+        if (requestedFontSizeDots is not double requestedFontSize)
+        {
+            return (largestFittingText, largestFittingFontSize);
+        }
+
+        FormattedText requestedText = CreateFormattedText(text, typeface, requestedFontSize);
+        return requestedText.Height <= maximumHeightDots
+            ? (requestedText, requestedFontSize)
+            : (largestFittingText, largestFittingFontSize);
     }
 
     private static (FormattedText Text, double FontSize) CreateLargestFittingText(

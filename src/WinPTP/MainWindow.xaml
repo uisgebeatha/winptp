@@ -6,13 +6,14 @@
         xmlns:local="clr-namespace:WinPTP"
         mc:Ignorable="d"
         Title="WinPTP Text Label"
-        Height="520"
+        Height="570"
         Width="720"
-        MinHeight="480"
+        MinHeight="530"
         MinWidth="600"
         Loaded="MainWindow_Loaded">
     <Grid Margin="20">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -45,7 +46,62 @@
                        Text="Label length: 0.0 mm" />
         </Grid>
 
-        <GroupBox Grid.Row="2"
+        <Grid Grid.Row="2" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="150" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Margin="0,0,10,0"
+                       VerticalAlignment="Center"
+                       Text="Font:" />
+            <ComboBox x:Name="FontComboBox"
+                      Grid.Column="1"
+                      MinWidth="180"
+                      Margin="0,0,16,0"
+                      SelectionChanged="FontComboBox_SelectionChanged">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding DisplayName}"
+                                   FontFamily="{Binding FontFamily}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Grid.Column="2"
+                       Margin="0,0,10,0"
+                       VerticalAlignment="Center"
+                       Text="Size:" />
+            <ComboBox x:Name="SizeModeComboBox"
+                      Grid.Column="3"
+                      Width="80"
+                      Margin="0,0,10,0"
+                      SelectionChanged="SizeModeComboBox_SelectionChanged" />
+            <TextBlock Grid.Column="4"
+                       Margin="0,0,6,0"
+                       VerticalAlignment="Center"
+                       Text="Dots:" />
+            <Slider x:Name="FontSizeSlider"
+                    Grid.Column="5"
+                    Minimum="1"
+                    Maximum="60"
+                    TickFrequency="0.5"
+                    IsSnapToTickEnabled="True"
+                    Value="24"
+                    ValueChanged="FontSizeSlider_ValueChanged" />
+            <TextBlock x:Name="FontSizeValueTextBlock"
+                       Grid.Column="6"
+                       Width="54"
+                       Margin="8,0,0,0"
+                       VerticalAlignment="Center"
+                       Text="—" />
+        </Grid>
+
+        <GroupBox Grid.Row="3"
                   Height="210"
                   Margin="0,12,0,16"
                   Header="Raster preview (12 mm tape)">
@@ -63,7 +119,7 @@
             </Grid>
         </GroupBox>
 
-        <Grid Grid.Row="3" Margin="0,0,0,16">
+        <Grid Grid.Row="4" Margin="0,0,0,16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -100,7 +156,7 @@
                     IsEnabled="False" />
         </Grid>
 
-        <Border Grid.Row="4"
+        <Border Grid.Row="5"
                 Padding="12"
                 BorderBrush="#FFC8C8C8"
                 BorderThickness="1"

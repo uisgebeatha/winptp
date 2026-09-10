@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Runtime.ExceptionServices;
+using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using WinPTP.Rendering;
@@ -80,6 +82,91 @@ public sealed class LabelRasterTests
     }
 
     [Fact]
+    public void Render_ExplicitTypefaceIsUsedForMeasuredLabelWidth()
+    {
+        TextLabelLayout layout = TextLabelLayout.TwelveMillimeter;
+        Typeface typeface = new("Consolas");
+        const double fontSizeDots = 18;
+
+        (TextLabelRenderResult Rendered, int ExpectedLength) result = RunOnStaThread(() =>
+        {
+            TextLabelRenderResult rendered = TextLabelRasterizer.Render(
+                "iiiiiiiiii",
+                typeface,
+                layout,
+                fontSizeDots);
+            FormattedText measuredText = new(
+                "iiiiiiiiii",
+                CultureInfo.CurrentUICulture,
+                FlowDirection.LeftToRight,
+                typeface,
+                fontSizeDots,
+                Brushes.Black,
+                1.0);
+            int expectedLength = (int)Math.Ceiling(measuredText.WidthIncludingTrailingWhitespace)
+                + (layout.HorizontalPaddingDots * 2);
+            return (rendered, expectedLength);
+        });
+
+        Assert.Equal(fontSizeDots, result.Rendered.SelectedFontSizeDots);
+        Assert.Equal(result.ExpectedLength, result.Rendered.Raster.RasterLineCount);
+    }
+
+    [Fact]
+    public void Render_DifferentTypefacesCanProduceDifferentRasterAndLength()
+    {
+        TextLabelRenderResult proportional = RenderOnStaThread(
+            "iiiiiiiiii",
+            typeface: new Typeface("Segoe UI"),
+            requestedFontSizeDots: 20);
+        TextLabelRenderResult monospaced = RenderOnStaThread(
+            "iiiiiiiiii",
+            typeface: new Typeface("Consolas"),
+            requestedFontSizeDots: 20);
+
+        Assert.NotEqual(proportional.Raster.RasterLineCount, monospaced.Raster.RasterLineCount);
+        Assert.NotEqual(
+            proportional.Raster.PackedData.ToArray(),
+            monospaced.Raster.PackedData.ToArray());
+    }
+
+    [Fact]
+    public void Render_ManualSizeIsRespectedWhenItFits()
+    {
+        TextLabelRenderResult rendered = RenderOnStaThread(
+            "Manual size",
+            requestedFontSizeDots: 18.5);
+
+        Assert.Equal(18.5, rendered.SelectedFontSizeDots);
+    }
+
+    [Fact]
+    public void Render_OversizedManualSizeClampsToAutomaticMaximum()
+    {
+        TextLabelRenderResult automatic = RenderOnStaThread("Clamp me");
+        TextLabelRenderResult oversized = RenderOnStaThread(
+            "Clamp me",
+            requestedFontSizeDots: 1000);
+
+        Assert.Equal(automatic.SelectedFontSizeDots, oversized.SelectedFontSizeDots);
+        Assert.Equal(automatic.Raster.PackedData.ToArray(), oversized.Raster.PackedData.ToArray());
+    }
+
+    [Fact]
+    public void Render_ChangingManualSizeChangesRasterAndLabelLength()
+    {
+        TextLabelRenderResult smaller = RenderOnStaThread(
+            "Adjustable",
+            requestedFontSizeDots: 12);
+        TextLabelRenderResult larger = RenderOnStaThread(
+            "Adjustable",
+            requestedFontSizeDots: 24);
+
+        Assert.True(larger.Raster.RasterLineCount > smaller.Raster.RasterLineCount);
+        Assert.NotEqual(smaller.Raster.PackedData.ToArray(), larger.Raster.PackedData.ToArray());
+    }
+
+    [Fact]
     public void Render_AutomaticSizing_KeepsPrintedPixelsInsideConfiguredTextArea()
     {
         TextLabelLayout layout = TextLabelLayout.TwelveMillimeter;
@@ -106,12 +193,47 @@ public sealed class LabelRasterTests
     }
 
     [Fact]
-    public void PreviewConversion_PreservesRasterPixelPositionsAndOrientation()
+    public void PhysicalTapePreview_HeightRoundsTwelveMillimetersToEightyFiveDots()
     {
-        bool[,] pixels = new bool[3, LabelRaster.HeadDotCount];
-        pixels[0, 0] = true;
-        pixels[1, 7] = true;
-        pixels[2, 127] = true;
+        Assert.Equal(85, LabelRasterPreviewConverter.PhysicalTapeHeightDots);
+        Assert.Equal(
+            12.0,
+            PrinterLengthConverter.DotsToMillimeters(
+                LabelRasterPreviewConverter.PhysicalTapeHeightDots),
+            precision: 1);
+    }
+
+    [Fact]
+    public void PhysicalTapePreview_CropIsCenteredAroundPrintableBand()
+    {
+        int topMargin = LabelRasterPreviewConverter.PhysicalTapeTopHeadDot;
+        int bottomMargin = LabelRaster.HeadDotCount
+            - topMargin
+            - LabelRasterPreviewConverter.PhysicalTapeHeightDots;
+        TextLabelLayout layout = TextLabelLayout.TwelveMillimeter;
+
+        Assert.Equal(21, topMargin);
+        Assert.Equal(22, bottomMargin);
+        Assert.Equal(11, layout.PrintableTopDot - topMargin);
+        Assert.Equal(
+            10,
+            topMargin
+                + LabelRasterPreviewConverter.PhysicalTapeHeightDots
+                - layout.PrintableTopDot
+                - layout.PrintableHeightDots);
+    }
+
+    [Fact]
+    public void PreviewConversion_CropsToPhysicalTapeAndPreservesMappedRasterPixels()
+    {
+        int topHeadDot = LabelRasterPreviewConverter.PhysicalTapeTopHeadDot;
+        int bottomHeadDot = topHeadDot + LabelRasterPreviewConverter.PhysicalTapeHeightDots - 1;
+        bool[,] pixels = new bool[4, LabelRaster.HeadDotCount];
+        pixels[0, topHeadDot] = true;
+        pixels[1, topHeadDot + 42] = true;
+        pixels[2, bottomHeadDot] = true;
+        pixels[3, topHeadDot - 1] = true;
+        pixels[3, bottomHeadDot + 1] = true;
         LabelRaster raster = LabelRaster.Pack(pixels);
 
         BitmapSource preview = LabelRasterPreviewConverter.ToBitmapSource(raster);
@@ -119,27 +241,53 @@ public sealed class LabelRasterTests
         byte[] previewPixels = new byte[stride * preview.PixelHeight];
         preview.CopyPixels(previewPixels, stride, 0);
 
-        Assert.Equal(3, preview.PixelWidth);
-        Assert.Equal(128, preview.PixelHeight);
+        Assert.Equal(4, preview.PixelWidth);
+        Assert.Equal(85, preview.PixelHeight);
 
-        for (int headDot = 0; headDot < preview.PixelHeight; headDot++)
+        for (int tapeDot = 0; tapeDot < preview.PixelHeight; tapeDot++)
         {
             for (int line = 0; line < preview.PixelWidth; line++)
             {
-                byte expected = raster.IsBlackPixel(line, headDot) ? (byte)0x00 : (byte)0xFF;
-                Assert.Equal(expected, previewPixels[(headDot * stride) + line]);
+                int sourceHeadDot = topHeadDot + tapeDot;
+                byte expected = raster.IsBlackPixel(line, sourceHeadDot) ? (byte)0x00 : (byte)0xFF;
+                Assert.Equal(expected, previewPixels[(tapeDot * stride) + line]);
             }
         }
+
+        Assert.All(
+            Enumerable.Range(0, preview.PixelHeight),
+            tapeDot => Assert.Equal(0xFF, previewPixels[(tapeDot * stride) + 3]));
+    }
+
+    [Fact]
+    public void PhysicalTapePreview_AspectRatioUsesLabelLengthAndTwelveMillimeterHeight()
+    {
+        LabelRaster raster = new(
+            rasterLineCount: 180,
+            new byte[180 * LabelRaster.BytesPerRasterLine]);
+
+        BitmapSource preview = LabelRasterPreviewConverter.ToBitmapSource(raster);
+        double expectedPhysicalAspectRatio = raster.LengthMillimeters
+            / LabelRasterPreviewConverter.PhysicalTapeHeightMillimeters;
+        double previewPixelAspectRatio = preview.PixelWidth / (double)preview.PixelHeight;
+
+        Assert.InRange(
+            Math.Abs(previewPixelAspectRatio - expectedPhysicalAspectRatio),
+            0,
+            0.002);
     }
 
     private static TextLabelRenderResult RenderOnStaThread(
         string text,
-        TextLabelLayout? layout = null)
+        TextLabelLayout? layout = null,
+        Typeface? typeface = null,
+        double? requestedFontSizeDots = null)
     {
         return RunOnStaThread(() => TextLabelRasterizer.Render(
             text,
-            new Typeface("Segoe UI"),
-            layout ?? TextLabelLayout.TwelveMillimeter));
+            typeface ?? new Typeface("Segoe UI"),
+            layout ?? TextLabelLayout.TwelveMillimeter,
+            requestedFontSizeDots));
     }
 
     private static T RunOnStaThread<T>(Func<T> action)
