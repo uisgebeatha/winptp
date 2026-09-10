@@ -27,6 +27,8 @@ internal sealed class LabelRaster
 
     public int RasterLineCount { get; }
 
+    public double LengthMillimeters => PrinterLengthConverter.DotsToMillimeters(RasterLineCount);
+
     public int DotsPerRasterLine => HeadDotCount;
 
     public ReadOnlyMemory<byte> PackedData => _packedData;
@@ -41,6 +43,26 @@ internal sealed class LabelRaster
         }
 
         return _packedData.AsSpan(index * BytesPerRasterLine, BytesPerRasterLine);
+    }
+
+    public bool IsBlackPixel(int rasterLine, int headDot)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(rasterLine);
+        ArgumentOutOfRangeException.ThrowIfNegative(headDot);
+
+        if (rasterLine >= RasterLineCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(rasterLine));
+        }
+
+        if (headDot >= HeadDotCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(headDot));
+        }
+
+        int byteOffset = (rasterLine * BytesPerRasterLine) + (headDot / 8);
+        byte mask = (byte)(0x80 >> (headDot % 8));
+        return (_packedData[byteOffset] & mask) != 0;
     }
 
     public static LabelRaster Pack(bool[,] pixels)

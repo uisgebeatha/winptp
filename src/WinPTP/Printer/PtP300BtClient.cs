@@ -45,7 +45,7 @@ internal static class PtP300BtClient
         if (initialStatus.TapeWidthMillimeters != 12)
         {
             throw new PtP300BtPrintException(
-                $"Test printing supports 12 mm tape only; detected {initialStatus.TapeWidthMillimeters} mm.");
+                $"Printing currently supports 12 mm tape only; detected {initialStatus.TapeWidthMillimeters} mm.");
         }
 
         byte[] printJob = PtP300BtPrintJobBuilder.Build(initialStatus, raster);

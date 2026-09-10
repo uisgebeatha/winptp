@@ -1,6 +1,8 @@
 ﻿using System.Text;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
 using WinPTP.Printer;
 using WinPTP.Rendering;
 
@@ -11,14 +13,26 @@ namespace WinPTP;
 /// </summary>
 public partial class MainWindow : Window
 {
+    private readonly Typeface _labelTypeface = new("Segoe UI");
+    private readonly TextLabelLayout _labelLayout = TextLabelLayout.TwelveMillimeter;
+    private LabelRaster? _previewRaster;
+    private bool _controlsEnabled = true;
+
     public MainWindow()
     {
         InitializeComponent();
+        LabelTextBox.TextChanged += LabelTextBox_TextChanged;
     }
 
     private void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
+        UpdatePreview();
         RefreshPorts();
+    }
+
+    private void LabelTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        UpdatePreview();
     }
 
     private void RefreshButton_Click(object sender, RoutedEventArgs e)
@@ -76,27 +90,33 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void PrintTestButton_Click(object sender, RoutedEventArgs e)
+    private async void PrintButton_Click(object sender, RoutedEventArgs e)
     {
         if (PortComboBox.SelectedItem is not string portName)
         {
-            StatusTextBlock.Text = "Select a COM port before printing the test label.";
+            StatusTextBlock.Text = "Select a COM port before printing.";
             return;
         }
 
+        if (_previewRaster is not LabelRaster raster)
+        {
+            StatusTextBlock.Text = "Enter label text before printing.";
+            return;
+        }
+
+        string labelText = LabelTextBox.Text;
         SetControlsEnabled(false);
-        StatusTextBlock.Text = $"Preparing \"{TestLabelRasterizer.LabelText}\" for {portName}...";
+        StatusTextBlock.Text = $"Printing the current preview on {portName}...";
 
         try
         {
-            LabelRaster raster = TestLabelRasterizer.Render();
             PtP300BtPrintResult result = await Task.Run(() => PtP300BtClient.Print(portName, raster));
 
             switch (result.Outcome)
             {
                 case PtP300BtPrintOutcome.PrintingCompleted:
                     StatusTextBlock.Text =
-                        $"Printed \"{TestLabelRasterizer.LabelText}\" successfully on {portName}.\n" +
+                        $"Printed \"{labelText}\" successfully on {portName}.\n" +
                         $"Printer: {result.Description}";
                     break;
                 case PtP300BtPrintOutcome.Printing:
@@ -105,7 +125,7 @@ public partial class MainWindow : Window
                         "Completion status was not received before the wait expired.";
                     break;
                 case PtP300BtPrintOutcome.PrinterError:
-                    StatusTextBlock.Text = $"Test print failed on {portName}: {result.Description}.";
+                    StatusTextBlock.Text = $"Print failed on {portName}: {result.Description}.";
                     break;
                 case PtP300BtPrintOutcome.CompletionStatusNotReceived:
                     StatusTextBlock.Text =
@@ -119,15 +139,15 @@ public partial class MainWindow : Window
         }
         catch (PtP300BtPrintException ex)
         {
-            StatusTextBlock.Text = $"Test print failed on {portName}: {ex.Message}";
+            StatusTextBlock.Text = $"Print failed on {portName}: {ex.Message}";
         }
         catch (PtP300BtResponseException ex)
         {
-            StatusTextBlock.Text = $"Test print failed on {portName}: {ex.Message}";
+            StatusTextBlock.Text = $"Print failed on {portName}: {ex.Message}";
         }
         catch (TimeoutException ex)
         {
-            StatusTextBlock.Text = $"Test print timed out on {portName}: {ex.Message}";
+            StatusTextBlock.Text = $"Print timed out on {portName}: {ex.Message}";
         }
         catch (UnauthorizedAccessException)
         {
@@ -147,12 +167,46 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            StatusTextBlock.Text = $"Test print failed on {portName}: {ex.Message}";
+            StatusTextBlock.Text = $"Print failed on {portName}: {ex.Message}";
         }
         finally
         {
             SetControlsEnabled(true);
         }
+    }
+
+    private void UpdatePreview()
+    {
+        string text = LabelTextBox.Text;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            _previewRaster = null;
+            PreviewImage.Source = null;
+            LabelLengthTextBlock.Text = "Label length: 0.0 mm";
+            PreviewPlaceholderTextBlock.Text = "Enter label text to generate a preview.";
+            PreviewPlaceholderTextBlock.Visibility = Visibility.Visible;
+            UpdatePrintButtonState();
+            return;
+        }
+
+        try
+        {
+            TextLabelRenderResult rendered = TextLabelRasterizer.Render(text, _labelTypeface, _labelLayout);
+            _previewRaster = rendered.Raster;
+            PreviewImage.Source = LabelRasterPreviewConverter.ToBitmapSource(rendered.Raster);
+            LabelLengthTextBlock.Text = $"Label length: {rendered.Raster.LengthMillimeters:F1} mm";
+            PreviewPlaceholderTextBlock.Visibility = Visibility.Collapsed;
+        }
+        catch (Exception ex)
+        {
+            _previewRaster = null;
+            PreviewImage.Source = null;
+            LabelLengthTextBlock.Text = "Label length: —";
+            PreviewPlaceholderTextBlock.Text = $"Preview unavailable: {ex.Message}";
+            PreviewPlaceholderTextBlock.Visibility = Visibility.Visible;
+        }
+
+        UpdatePrintButtonState();
     }
 
     private void RefreshPorts()
@@ -186,10 +240,17 @@ public partial class MainWindow : Window
 
     private void SetControlsEnabled(bool isEnabled)
     {
+        _controlsEnabled = isEnabled;
+        LabelTextBox.IsEnabled = isEnabled;
         PortComboBox.IsEnabled = isEnabled;
         RefreshButton.IsEnabled = isEnabled;
         CheckPrinterButton.IsEnabled = isEnabled;
-        PrintTestButton.IsEnabled = isEnabled;
+        UpdatePrintButtonState();
+    }
+
+    private void UpdatePrintButtonState()
+    {
+        PrintButton.IsEnabled = _controlsEnabled && _previewRaster is not null;
     }
 
     private static string FormatStatus(string portName, PtP300BtStatus status)

@@ -5,14 +5,16 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:WinPTP"
         mc:Ignorable="d"
-        Title="WinPTP Printer Check"
-        Height="280"
-        Width="520"
-        MinHeight="250"
-        MinWidth="460"
+        Title="WinPTP Text Label"
+        Height="520"
+        Width="720"
+        MinHeight="480"
+        MinWidth="600"
         Loaded="MainWindow_Loaded">
     <Grid Margin="20">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -20,9 +22,48 @@
 
         <TextBlock FontSize="18"
                    FontWeight="SemiBold"
-                   Text="PT-P300BT connection check" />
+                   Text="PT-P300BT text label" />
 
-        <Grid Grid.Row="1" Margin="0,16,0,16">
+        <Grid Grid.Row="1" Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Margin="0,0,10,0"
+                       VerticalAlignment="Center"
+                       Text="Label text:" />
+            <TextBox x:Name="LabelTextBox"
+                     Grid.Column="1"
+                     Padding="6,4"
+                     Text="WinPTP Test" />
+            <TextBlock x:Name="LabelLengthTextBlock"
+                       Grid.Column="2"
+                       Margin="16,0,0,0"
+                       VerticalAlignment="Center"
+                       Text="Label length: 0.0 mm" />
+        </Grid>
+
+        <GroupBox Grid.Row="2"
+                  Height="210"
+                  Margin="0,12,0,16"
+                  Header="Raster preview (12 mm tape)">
+            <Grid Margin="8" Background="#FFE4E4E4">
+                <Image x:Name="PreviewImage"
+                       Margin="12"
+                       RenderOptions.BitmapScalingMode="NearestNeighbor"
+                       SnapsToDevicePixels="True"
+                       Stretch="Uniform" />
+                <TextBlock x:Name="PreviewPlaceholderTextBlock"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="#FF666666"
+                           Text="Generating preview..." />
+            </Grid>
+        </GroupBox>
+
+        <Grid Grid.Row="3" Margin="0,0,0,16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -51,14 +92,15 @@
                     Padding="12,5"
                     Click="CheckPrinterButton_Click"
                     Content="Check Printer" />
-            <Button x:Name="PrintTestButton"
+            <Button x:Name="PrintButton"
                     Grid.Column="4"
                     Padding="12,5"
-                    Click="PrintTestButton_Click"
-                    Content="Print Test" />
+                    Click="PrintButton_Click"
+                    Content="Print"
+                    IsEnabled="False" />
         </Grid>
 
-        <Border Grid.Row="2"
+        <Border Grid.Row="4"
                 Padding="12"
                 BorderBrush="#FFC8C8C8"
                 BorderThickness="1"
