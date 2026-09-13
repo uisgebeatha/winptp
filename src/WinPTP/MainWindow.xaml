@@ -6,13 +6,14 @@
         xmlns:local="clr-namespace:WinPTP"
         mc:Ignorable="d"
         Title="WinPTP Text Label"
-        Height="570"
+        Height="620"
         Width="720"
-        MinHeight="530"
+        MinHeight="580"
         MinWidth="600"
         Loaded="MainWindow_Loaded">
     <Grid Margin="20">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -101,7 +102,34 @@
                        Text="—" />
         </Grid>
 
-        <GroupBox Grid.Row="3"
+        <Grid Grid.Row="3" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Margin="0,0,10,0"
+                       VerticalAlignment="Center"
+                       Text="Copies:" />
+            <TextBox x:Name="CopiesTextBox"
+                     Grid.Column="1"
+                     Width="44"
+                     MaxLength="2"
+                     Padding="5,3"
+                     Text="1"
+                     TextAlignment="Right"
+                     PreviewTextInput="CopiesTextBox_PreviewTextInput"
+                     TextChanged="CopiesTextBox_TextChanged"
+                     LostFocus="CopiesTextBox_LostFocus" />
+            <TextBlock x:Name="EstimatedTapeUseTextBlock"
+                       Grid.Column="3"
+                       VerticalAlignment="Center"
+                       Text="Estimated tape use: 0.0 mm" />
+        </Grid>
+
+        <GroupBox Grid.Row="4"
                   Height="210"
                   Margin="0,12,0,16"
                   Header="Raster preview (12 mm tape)">
@@ -119,7 +147,7 @@
             </Grid>
         </GroupBox>
 
-        <Grid Grid.Row="4" Margin="0,0,0,16">
+        <Grid Grid.Row="5" Margin="0,0,0,16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -156,7 +184,7 @@
                     IsEnabled="False" />
         </Grid>
 
-        <Border Grid.Row="5"
+        <Border Grid.Row="6"
                 Padding="12"
                 BorderBrush="#FFC8C8C8"
                 BorderThickness="1"

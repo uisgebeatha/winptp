@@ -2,6 +2,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using WinPTP.Printer;
 using WinPTP.Rendering;
@@ -75,6 +76,38 @@ public partial class MainWindow : Window
         }
     }
 
+    private void CopiesTextBox_PreviewTextInput(object sender, TextCompositionEventArgs e)
+    {
+        e.Handled = e.Text.Any(character => character is < '0' or > '9');
+    }
+
+    private void CopiesTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!_editorControlsInitialized)
+        {
+            return;
+        }
+
+        UpdateEstimatedTapeUse();
+        UpdatePrintButtonState();
+    }
+
+    private void CopiesTextBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (TryGetPrintOptions(out _))
+        {
+            return;
+        }
+
+        int normalizedCopies = int.TryParse(CopiesTextBox.Text, out int copies)
+            ? Math.Clamp(
+                copies,
+                PtP300BtPrintOptions.MinimumCopies,
+                PtP300BtPrintOptions.MaximumCopies)
+            : PtP300BtPrintOptions.MinimumCopies;
+        CopiesTextBox.Text = normalizedCopies.ToString();
+    }
+
     private void RefreshButton_Click(object sender, RoutedEventArgs e)
     {
         RefreshPorts();
@@ -144,37 +177,38 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (!TryGetPrintOptions(out PtP300BtPrintOptions options))
+        {
+            StatusTextBlock.Text =
+                $"Copies must be a whole number from {PtP300BtPrintOptions.MinimumCopies} " +
+                $"to {PtP300BtPrintOptions.MaximumCopies}.";
+            return;
+        }
+
         string labelText = LabelTextBox.Text;
         SetControlsEnabled(false);
-        StatusTextBlock.Text = $"Printing the current preview on {portName}...";
+        StatusTextBlock.Text = options.Copies == 1
+            ? $"Printing the current preview on {portName}..."
+            : $"Printing {options.Copies} copies as one strip on {portName}...";
 
         try
         {
-            PtP300BtPrintResult result = await Task.Run(() => PtP300BtClient.Print(portName, raster));
+            PtP300BtPrintResult result = await Task.Run(
+                () => PtP300BtClient.PrintCopies(portName, raster, options));
 
-            switch (result.Outcome)
+            if (options.Copies == 1)
             {
-                case PtP300BtPrintOutcome.PrintingCompleted:
-                    StatusTextBlock.Text =
-                        $"Printed \"{labelText}\" successfully on {portName}.\n" +
-                        $"Printer: {result.Description}";
-                    break;
-                case PtP300BtPrintOutcome.Printing:
-                    StatusTextBlock.Text =
-                        $"Print command sent to {portName}. Printer: {result.Description}. " +
-                        "Completion status was not received before the wait expired.";
-                    break;
-                case PtP300BtPrintOutcome.PrinterError:
-                    StatusTextBlock.Text = $"Print failed on {portName}: {result.Description}.";
-                    break;
-                case PtP300BtPrintOutcome.CompletionStatusNotReceived:
-                    StatusTextBlock.Text =
-                        $"Print command sent to {portName}, but completion status was not received before the wait expired.";
-                    break;
-                default:
-                    StatusTextBlock.Text =
-                        $"Print command sent to {portName}. {result.Description}. Completion was not confirmed.";
-                    break;
+                StatusTextBlock.Text = FormatSinglePrintResult(
+                    portName,
+                    labelText,
+                    result);
+            }
+            else
+            {
+                StatusTextBlock.Text = FormatCompositePrintResult(
+                    portName,
+                    options.Copies,
+                    result);
             }
         }
         catch (PtP300BtPrintException ex)
@@ -223,6 +257,7 @@ public partial class MainWindow : Window
             _previewRaster = null;
             PreviewImage.Source = null;
             LabelLengthTextBlock.Text = "Label length: 0.0 mm";
+            EstimatedTapeUseTextBlock.Text = "Estimated tape use: 0.0 mm";
             FontSizeValueTextBlock.Text = IsManualSizeMode
                 ? $"{FontSizeSlider.Value:F1}"
                 : "—";
@@ -243,6 +278,7 @@ public partial class MainWindow : Window
             PreviewImage.Source = LabelRasterPreviewConverter.ToBitmapSource(rendered.Raster);
             LabelLengthTextBlock.Text = $"Label length: {rendered.Raster.LengthMillimeters:F1} mm";
             SetEffectiveFontSize(rendered.SelectedFontSizeDots);
+            UpdateEstimatedTapeUse();
             PreviewPlaceholderTextBlock.Visibility = Visibility.Collapsed;
         }
         catch (Exception ex)
@@ -250,6 +286,7 @@ public partial class MainWindow : Window
             _previewRaster = null;
             PreviewImage.Source = null;
             LabelLengthTextBlock.Text = "Label length: —";
+            EstimatedTapeUseTextBlock.Text = "Estimated tape use: —";
             PreviewPlaceholderTextBlock.Text = $"Preview unavailable: {ex.Message}";
             PreviewPlaceholderTextBlock.Visibility = Visibility.Visible;
         }
@@ -292,6 +329,7 @@ public partial class MainWindow : Window
         LabelTextBox.IsEnabled = isEnabled;
         FontComboBox.IsEnabled = isEnabled;
         SizeModeComboBox.IsEnabled = isEnabled;
+        CopiesTextBox.IsEnabled = isEnabled;
         PortComboBox.IsEnabled = isEnabled;
         RefreshButton.IsEnabled = isEnabled;
         CheckPrinterButton.IsEnabled = isEnabled;
@@ -301,7 +339,9 @@ public partial class MainWindow : Window
 
     private void UpdatePrintButtonState()
     {
-        PrintButton.IsEnabled = _controlsEnabled && _previewRaster is not null;
+        PrintButton.IsEnabled = _controlsEnabled
+            && _previewRaster is not null
+            && TryGetPrintOptions(out _);
     }
 
     private bool IsManualSizeMode =>
@@ -352,6 +392,83 @@ public partial class MainWindow : Window
     private void UpdateFontSizeControlState()
     {
         FontSizeSlider.IsEnabled = _controlsEnabled && IsManualSizeMode;
+    }
+
+    private bool TryGetPrintOptions(out PtP300BtPrintOptions options)
+    {
+        if (int.TryParse(CopiesTextBox.Text, out int copies)
+            && copies is >= PtP300BtPrintOptions.MinimumCopies
+                and <= PtP300BtPrintOptions.MaximumCopies)
+        {
+            options = new PtP300BtPrintOptions(copies);
+            return true;
+        }
+
+        options = null!;
+        return false;
+    }
+
+    private void UpdateEstimatedTapeUse()
+    {
+        if (_previewRaster is not LabelRaster raster)
+        {
+            EstimatedTapeUseTextBlock.Text = "Estimated tape use: 0.0 mm";
+            return;
+        }
+
+        if (!TryGetPrintOptions(out PtP300BtPrintOptions options))
+        {
+            EstimatedTapeUseTextBlock.Text = "Estimated tape use: —";
+            return;
+        }
+
+        PrintTapeUseEstimate estimate = PrintTapeUseCalculator.Calculate(raster, options);
+        EstimatedTapeUseTextBlock.Text =
+            $"Estimated tape use: {estimate.EstimatedCommandedMillimeters:F1} mm";
+    }
+
+    private static string FormatSinglePrintResult(
+        string portName,
+        string labelText,
+        PtP300BtPrintResult result)
+    {
+        return result.Outcome switch
+        {
+            PtP300BtPrintOutcome.PrintingCompleted =>
+                $"Printed \"{labelText}\" successfully on {portName}.\nPrinter: {result.Description}",
+            PtP300BtPrintOutcome.Printing =>
+                $"Print command sent to {portName}. Printer: {result.Description}. " +
+                "Completion status was not received before the wait expired.",
+            PtP300BtPrintOutcome.PrinterError =>
+                $"Print failed on {portName}: {result.Description}.",
+            PtP300BtPrintOutcome.CompletionStatusNotReceived =>
+                $"Print command sent to {portName}, but completion status was not received before the wait expired.",
+            _ =>
+                $"Print command sent to {portName}. {result.Description}. Completion was not confirmed."
+        };
+    }
+
+    internal static string FormatCompositePrintResult(
+        string portName,
+        int copies,
+        PtP300BtPrintResult result)
+    {
+        return result.Outcome switch
+        {
+            PtP300BtPrintOutcome.PrintingCompleted =>
+                $"Printed {copies} copies as one strip on {portName}.",
+            PtP300BtPrintOutcome.PrinterError =>
+                $"Composite print for {copies} copies failed on {portName}: {result.Description}.",
+            PtP300BtPrintOutcome.Printing =>
+                $"Composite print for {copies} copies was sent to {portName}, but completion " +
+                $"was not confirmed. Printer: {result.Description}.",
+            PtP300BtPrintOutcome.CompletionStatusNotReceived =>
+                $"Composite print for {copies} copies was sent to {portName}, but completion " +
+                "status was not received before the wait expired.",
+            _ =>
+                $"Composite print for {copies} copies was sent to {portName}, but completion " +
+                $"was not confirmed. {result.Description}."
+        };
     }
 
     private static string FormatStatus(string portName, PtP300BtStatus status)

@@ -9,6 +9,8 @@ Simple native Windows application for creating and printing labels with the Brot
 - The editor supports editable text with a live preview generated from the final one-bit printer raster.
 - Text can use installed Windows font families with automatic largest-fitting or adjustable manual sizing.
 - The calculated physical label length updates live with the final raster.
+- Multiple copies are produced as one continuous composite strip with approximately 4 mm of blank space between labels.
+- Estimated tape use reflects the composite raster plus the configured final feed; it does not include calibrated mechanical cassette waste.
 - Printing currently supports 12 mm tape only.
 
 Development path: F:\DEV\winptp

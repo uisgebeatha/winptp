@@ -73,4 +73,50 @@ public sealed class PtP300BtPrintJobBuilderTests
         Assert.Equal(PtP300BtPrintJobBuilder.BuildRasterTransfer(rasterLine), job[98..117]);
         Assert.Equal(0x1A, job[^1]);
     }
+
+    [Fact]
+    public void Build_TwoCopyCompositeProducesOneNormalSinglePageJob()
+    {
+        PtP300BtStatus status = new(
+            ErrorFlags: 0,
+            TapeWidthMillimeters: 12,
+            MediaType: 0x01,
+            FixedTapeLength: 0,
+            StatusType: 0,
+            PhaseType: 0,
+            Phase: 0);
+        LabelRaster original = new(
+            rasterLineCount: 2,
+            new byte[2 * LabelRaster.BytesPerRasterLine]);
+        LabelRaster composite = LabelRasterComposer.Compose(
+            original,
+            copies: 2,
+            LabelRasterComposer.CopySeparatorDots);
+
+        byte[] job = PtP300BtPrintJobBuilder.Build(status, composite);
+
+        Assert.Equal(new byte[] { 0x1B, 0x69, 0x4B, 0x08 }, job[83..87]);
+        Assert.Equal(composite.RasterLineCount, BitConverter.ToInt32(job, 77));
+        Assert.Equal(
+            new[] { 75 },
+            job.Select((value, index) => (value, index))
+                .Where(item => item.value == 0x0C)
+                .Select(item => item.index));
+        Assert.Equal(1, job.Count(value => value == 0x1A));
+        Assert.Equal(0x1A, job[^1]);
+
+        const int rasterCommandsOffset = 98;
+        int rasterTransferLength = 3 + LabelRaster.BytesPerRasterLine;
+        for (int line = 0; line < composite.RasterLineCount; line++)
+        {
+            int offset = rasterCommandsOffset + (line * rasterTransferLength);
+            Assert.Equal(0x47, job[offset]);
+            Assert.Equal(LabelRaster.BytesPerRasterLine, job[offset + 1]);
+            Assert.Equal(0x00, job[offset + 2]);
+        }
+
+        int finalCommandOffset = rasterCommandsOffset
+            + (composite.RasterLineCount * rasterTransferLength);
+        Assert.Equal(job.Length - 1, finalCommandOffset);
+    }
 }

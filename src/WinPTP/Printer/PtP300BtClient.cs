@@ -51,8 +51,26 @@ internal static class PtP300BtClient
         byte[] printJob = PtP300BtPrintJobBuilder.Build(initialStatus, raster);
         port.Write(printJob, 0, printJob.Length);
 
-        PtP300BtStatus? finalStatus = ReadPostPrintStatus(port);
+        PtP300BtStatus? finalStatus = ReadPostPrintStatus(
+            port,
+            PostPrintCompletionTimeoutMilliseconds);
         return new PtP300BtPrintResult(finalStatus);
+    }
+
+    public static PtP300BtPrintResult PrintCopies(
+        string portName,
+        LabelRaster raster,
+        PtP300BtPrintOptions options)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(portName);
+        ArgumentNullException.ThrowIfNull(raster);
+        ArgumentNullException.ThrowIfNull(options);
+
+        LabelRaster compositeRaster = LabelRasterComposer.Compose(
+            raster,
+            options.Copies,
+            LabelRasterComposer.CopySeparatorDots);
+        return Print(portName, compositeRaster);
     }
 
     private static SerialPort CreateSerialPort(string portName)
@@ -79,18 +97,18 @@ internal static class PtP300BtClient
         return PtP300BtStatusParser.Parse(response);
     }
 
-    private static PtP300BtStatus? ReadPostPrintStatus(SerialPort port)
+    private static PtP300BtStatus? ReadPostPrintStatus(SerialPort port, int timeoutMilliseconds)
     {
         Stopwatch timeout = Stopwatch.StartNew();
         PtP300BtStatus? latestStatus = null;
 
-        while (timeout.ElapsedMilliseconds < PostPrintCompletionTimeoutMilliseconds)
+        while (timeout.ElapsedMilliseconds < timeoutMilliseconds)
         {
             byte[]? response = ReadExact(
                 port,
                 ResponseLength,
                 timeout,
-                PostPrintCompletionTimeoutMilliseconds,
+                timeoutMilliseconds,
                 optional: true);
             if (response is null)
             {
