@@ -6,11 +6,20 @@
         xmlns:local="clr-namespace:WinPTP"
         mc:Ignorable="d"
         Title="WinPTP Text Label"
+        Icon="Assets/WinPTP.ico"
         Height="670"
         Width="720"
         MinHeight="630"
         MinWidth="600"
         Loaded="MainWindow_Loaded">
+    <DockPanel>
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="_Help">
+                <MenuItem Header="_About WinPTP"
+                          Click="AboutMenuItem_Click" />
+            </MenuItem>
+        </Menu>
+
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -207,4 +216,5 @@
                        TextWrapping="Wrap" />
         </Border>
     </Grid>
+    </DockPanel>
 </Window>

@@ -13,5 +13,7 @@ Simple native Windows application for creating and printing labels with the Brot
 - Multiple copies are produced as one continuous composite strip with approximately 4 mm of blank space between labels.
 - Estimated tape use reflects the composite raster plus the configured final feed; it does not include calibrated mechanical cassette waste.
 - Printing currently supports 12 mm tape only.
+- The application version and build date are available under **Help > About WinPTP**.
+- Standalone self-contained Windows x64 builds remain supported.
 
 Development path: F:\DEV\winptp

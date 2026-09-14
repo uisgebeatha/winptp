@@ -6,7 +6,16 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <Version>0.1.0</Version>
+    <ApplicationIcon>Assets\WinPTP.ico</ApplicationIcon>
+    <WinPTPBuildDate>$([System.DateTime]::UtcNow.ToString('yyyy-MM-dd'))</WinPTPBuildDate>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="BuildDate" Value="$(WinPTPBuildDate)" />
+    <Resource Include="Assets\WinPTP.ico" />
+    <Resource Include="Assets\WinPTP.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="System.IO.Ports" Version="10.0.12" />

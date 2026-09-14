@@ -121,6 +121,15 @@ public partial class MainWindow : Window
         RefreshPorts();
     }
 
+    private void AboutMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        AboutWindow aboutWindow = new()
+        {
+            Owner = this
+        };
+        aboutWindow.ShowDialog();
+    }
+
     private async void CheckPrinterButton_Click(object sender, RoutedEventArgs e)
     {
         if (PortComboBox.SelectedItem is not string portName)
