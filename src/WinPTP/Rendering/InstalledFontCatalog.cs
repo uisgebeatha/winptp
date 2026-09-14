@@ -5,10 +5,10 @@ namespace WinPTP.Rendering;
 
 internal sealed record InstalledFontFamily(string DisplayName, FontFamily FontFamily)
 {
-    public Typeface CreateTypeface() => new(
+    public Typeface CreateTypeface(bool bold = false, bool italic = false) => new(
         FontFamily,
-        FontStyles.Normal,
-        FontWeights.Normal,
+        italic ? FontStyles.Italic : FontStyles.Normal,
+        bold ? FontWeights.Bold : FontWeights.Normal,
         FontStretches.Normal);
 }
 

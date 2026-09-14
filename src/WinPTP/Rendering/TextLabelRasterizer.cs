@@ -9,6 +9,7 @@ internal sealed record TextLabelRenderResult(LabelRaster Raster, double Selected
 
 internal static class TextLabelRasterizer
 {
+    public const double MaximumFontSizeDots = 512;
     private const double MinimumFontSizeDots = 1;
     private const double FontSizeStepDots = 0.5;
     private const byte BlackThreshold = 160;
@@ -17,7 +18,8 @@ internal static class TextLabelRasterizer
         string text,
         Typeface typeface,
         TextLabelLayout layout,
-        double? requestedFontSizeDots = null)
+        double? requestedFontSizeDots = null,
+        bool underline = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(text);
         ArgumentNullException.ThrowIfNull(typeface);
@@ -32,59 +34,80 @@ internal static class TextLabelRasterizer
         (FormattedText largestFittingText, double largestFittingFontSize) = CreateLargestFittingText(
             text,
             typeface,
-            layout.TextAreaHeightDots);
+            layout.TextAreaHeightDots, underline);
         (FormattedText formattedText, double fontSize) = SelectTextSize(
             text,
             typeface,
             layout.TextAreaHeightDots,
             requestedFontSizeDots,
             largestFittingText,
-            largestFittingFontSize);
+            largestFittingFontSize, underline);
 
-        int labelLengthDots = Math.Max(
-            1,
-            (int)Math.Ceiling(formattedText.WidthIncludingTrailingWhitespace)
-                + (layout.HorizontalPaddingDots * 2));
-        double textTop = layout.TextAreaTopDot
-            + ((layout.TextAreaHeightDots - formattedText.Height) / 2.0);
-
-        DrawingVisual visual = new();
-        TextOptions.SetTextFormattingMode(visual, TextFormattingMode.Display);
-        TextOptions.SetTextRenderingMode(visual, TextRenderingMode.Grayscale);
-
-        using (DrawingContext drawing = visual.RenderOpen())
+        while (fontSize >= MinimumFontSizeDots)
         {
-            drawing.DrawRectangle(
-                Brushes.White,
-                null,
-                new Rect(0, 0, labelLengthDots, LabelRaster.HeadDotCount));
-            drawing.DrawText(formattedText, new Point(layout.HorizontalPaddingDots, textTop));
-        }
+            Rect ink = formattedText.BuildGeometry(new Point()).Bounds;
+            double left = Math.Min(0, ink.Left);
+            int labelLengthDots = Math.Max(
+                1,
+                (int)Math.Ceiling(Math.Max(formattedText.WidthIncludingTrailingWhitespace, ink.Right) - left)
+                    + (layout.HorizontalPaddingDots * 2));
+            double textTop = layout.TextAreaTopDot
+                + ((layout.TextAreaHeightDots - ink.Height) / 2.0) - ink.Top;
 
-        RenderTargetBitmap bitmap = new(
-            labelLengthDots,
-            LabelRaster.HeadDotCount,
-            96,
-            96,
-            PixelFormats.Pbgra32);
-        bitmap.Render(visual);
+            DrawingVisual visual = new();
+            TextOptions.SetTextFormattingMode(visual, TextFormattingMode.Display);
+            TextOptions.SetTextRenderingMode(visual, TextRenderingMode.Grayscale);
 
-        int stride = labelLengthDots * 4;
-        byte[] pixels = new byte[stride * LabelRaster.HeadDotCount];
-        bitmap.CopyPixels(pixels, stride, 0);
-
-        bool[,] blackPixels = new bool[labelLengthDots, LabelRaster.HeadDotCount];
-        for (int headDot = 0; headDot < LabelRaster.HeadDotCount; headDot++)
-        {
-            for (int line = 0; line < labelLengthDots; line++)
+            using (DrawingContext drawing = visual.RenderOpen())
             {
-                int pixelOffset = (headDot * stride) + (line * 4);
-                int luminance = (pixels[pixelOffset] + pixels[pixelOffset + 1] + pixels[pixelOffset + 2]) / 3;
-                blackPixels[line, headDot] = luminance < BlackThreshold;
+                drawing.DrawRectangle(
+                    Brushes.White,
+                    null,
+                    new Rect(0, 0, labelLengthDots, LabelRaster.HeadDotCount));
+                drawing.DrawText(formattedText, new Point(layout.HorizontalPaddingDots - left, textTop));
+            }
+
+            RenderTargetBitmap bitmap = new(
+                labelLengthDots,
+                LabelRaster.HeadDotCount,
+                96,
+                96,
+                PixelFormats.Pbgra32);
+            bitmap.Render(visual);
+
+            int stride = labelLengthDots * 4;
+            byte[] pixels = new byte[stride * LabelRaster.HeadDotCount];
+            bitmap.CopyPixels(pixels, stride, 0);
+
+            bool fits = true;
+            bool[,] blackPixels = new bool[labelLengthDots, LabelRaster.HeadDotCount];
+            for (int headDot = 0; headDot < LabelRaster.HeadDotCount; headDot++)
+            {
+                for (int line = 0; line < labelLengthDots; line++)
+                {
+                    int pixelOffset = (headDot * stride) + (line * 4);
+                    int luminance = (pixels[pixelOffset] + pixels[pixelOffset + 1] + pixels[pixelOffset + 2]) / 3;
+                    blackPixels[line, headDot] = luminance < BlackThreshold;
+                    if (blackPixels[line, headDot] && (headDot < layout.TextAreaTopDot
+                        || headDot >= layout.TextAreaTopDot + layout.TextAreaHeightDots))
+                    {
+                        fits = false;
+                    }
+                }
+            }
+
+            if (fits)
+            {
+                return new TextLabelRenderResult(LabelRaster.Pack(blackPixels), fontSize);
+            }
+            // Hinting can move edges relative to vector bounds. Shrink, never clip ink.
+            fontSize -= FontSizeStepDots;
+            if (fontSize >= MinimumFontSizeDots)
+            {
+                formattedText = CreateFormattedText(text, typeface, fontSize, underline);
             }
         }
-
-        return new TextLabelRenderResult(LabelRaster.Pack(blackPixels), fontSize);
+        throw new InvalidOperationException("The text cannot fit within the configured printable height.");
     }
 
     private static (FormattedText Text, double FontSize) SelectTextSize(
@@ -93,15 +116,17 @@ internal static class TextLabelRasterizer
         int maximumHeightDots,
         double? requestedFontSizeDots,
         FormattedText largestFittingText,
-        double largestFittingFontSize)
+        double largestFittingFontSize,
+        bool underline)
     {
-        if (requestedFontSizeDots is not double requestedFontSize)
+        if (requestedFontSizeDots is not double requestedFontSize
+            || requestedFontSize > MaximumFontSizeDots)
         {
             return (largestFittingText, largestFittingFontSize);
         }
 
-        FormattedText requestedText = CreateFormattedText(text, typeface, requestedFontSize);
-        return requestedText.Height <= maximumHeightDots
+        FormattedText requestedText = CreateFormattedText(text, typeface, requestedFontSize, underline);
+        return InkHeight(requestedText) <= maximumHeightDots
             ? (requestedText, requestedFontSize)
             : (largestFittingText, largestFittingFontSize);
     }
@@ -109,10 +134,11 @@ internal static class TextLabelRasterizer
     private static (FormattedText Text, double FontSize) CreateLargestFittingText(
         string text,
         Typeface typeface,
-        int maximumHeightDots)
+        int maximumHeightDots,
+        bool underline)
     {
         int minimumStep = (int)(MinimumFontSizeDots / FontSizeStepDots);
-        int maximumStep = (int)(maximumHeightDots / FontSizeStepDots);
+        int maximumStep = (int)(MaximumFontSizeDots / FontSizeStepDots);
         int selectedStep = -1;
         FormattedText? largestText = null;
 
@@ -120,8 +146,8 @@ internal static class TextLabelRasterizer
         {
             int candidateStep = minimumStep + ((maximumStep - minimumStep) / 2);
             double fontSize = candidateStep * FontSizeStepDots;
-            FormattedText candidate = CreateFormattedText(text, typeface, fontSize);
-            if (candidate.Height <= maximumHeightDots)
+            FormattedText candidate = CreateFormattedText(text, typeface, fontSize, underline);
+            if (InkHeight(candidate) <= maximumHeightDots)
             {
                 selectedStep = candidateStep;
                 largestText = candidate;
@@ -141,9 +167,21 @@ internal static class TextLabelRasterizer
         return (largestText, selectedStep * FontSizeStepDots);
     }
 
-    private static FormattedText CreateFormattedText(string text, Typeface typeface, double fontSize)
+    private static double InkHeight(FormattedText text)
     {
-        return new FormattedText(
+        // Includes the complete multiline glyph block and WPF text decorations.
+        // Geometry is measured only; the proven DrawText/threshold path still renders.
+        Rect bounds = text.BuildGeometry(new Point()).Bounds;
+        if (bounds.IsEmpty)
+        {
+            throw new InvalidOperationException("The text contains no visible glyphs.");
+        }
+        return bounds.Height;
+    }
+
+    private static FormattedText CreateFormattedText(string text, Typeface typeface, double fontSize, bool underline)
+    {
+        FormattedText formatted = new(
             text,
             CultureInfo.CurrentUICulture,
             FlowDirection.LeftToRight,
@@ -151,5 +189,10 @@ internal static class TextLabelRasterizer
             fontSize,
             Brushes.Black,
             1.0);
+        if (underline)
+        {
+            formatted.SetTextDecorations(TextDecorations.Underline);
+        }
+        return formatted;
     }
 }

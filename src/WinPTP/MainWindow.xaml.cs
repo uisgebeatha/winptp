@@ -108,6 +108,14 @@ public partial class MainWindow : Window
         CopiesTextBox.Text = normalizedCopies.ToString();
     }
 
+    private void TextStyle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_editorControlsInitialized)
+        {
+            UpdatePreview();
+        }
+    }
+
     private void RefreshButton_Click(object sender, RoutedEventArgs e)
     {
         RefreshPorts();
@@ -256,8 +264,8 @@ public partial class MainWindow : Window
         {
             _previewRaster = null;
             PreviewImage.Source = null;
-            LabelLengthTextBlock.Text = "Label length: 0.0 mm";
-            EstimatedTapeUseTextBlock.Text = "Estimated tape use: 0.0 mm";
+            LabelLengthTextBlock.Text = "Label length: 0 mm";
+            EstimatedTapeUseTextBlock.Text = "Estimated tape use: 0 mm";
             FontSizeValueTextBlock.Text = IsManualSizeMode
                 ? $"{FontSizeSlider.Value:F1}"
                 : "—";
@@ -273,10 +281,11 @@ public partial class MainWindow : Window
                 text,
                 GetSelectedTypeface(),
                 _labelLayout,
-                IsManualSizeMode ? FontSizeSlider.Value : null);
+                IsManualSizeMode ? FontSizeSlider.Value : null,
+                underline: UnderlineCheckBox.IsChecked == true);
             _previewRaster = rendered.Raster;
             PreviewImage.Source = LabelRasterPreviewConverter.ToBitmapSource(rendered.Raster);
-            LabelLengthTextBlock.Text = $"Label length: {rendered.Raster.LengthMillimeters:F1} mm";
+            LabelLengthTextBlock.Text = $"Label length: {LengthDisplayFormatter.FormatMillimeters(rendered.Raster.LengthMillimeters)}";
             SetEffectiveFontSize(rendered.SelectedFontSizeDots);
             UpdateEstimatedTapeUse();
             PreviewPlaceholderTextBlock.Visibility = Visibility.Collapsed;
@@ -330,6 +339,9 @@ public partial class MainWindow : Window
         FontComboBox.IsEnabled = isEnabled;
         SizeModeComboBox.IsEnabled = isEnabled;
         CopiesTextBox.IsEnabled = isEnabled;
+        BoldCheckBox.IsEnabled = isEnabled;
+        ItalicCheckBox.IsEnabled = isEnabled;
+        UnderlineCheckBox.IsEnabled = isEnabled;
         PortComboBox.IsEnabled = isEnabled;
         RefreshButton.IsEnabled = isEnabled;
         CheckPrinterButton.IsEnabled = isEnabled;
@@ -363,7 +375,7 @@ public partial class MainWindow : Window
 
         SizeModeComboBox.ItemsSource = new[] { AutoSizeMode, ManualSizeMode };
         SizeModeComboBox.SelectedItem = AutoSizeMode;
-        FontSizeSlider.Maximum = _labelLayout.TextAreaHeightDots;
+        FontSizeSlider.Maximum = TextLabelRasterizer.MaximumFontSizeDots;
         _editorControlsInitialized = true;
         UpdateFontSizeControlState();
     }
@@ -371,8 +383,9 @@ public partial class MainWindow : Window
     private Typeface GetSelectedTypeface()
     {
         return FontComboBox.SelectedItem is InstalledFontFamily selectedFont
-            ? selectedFont.CreateTypeface()
-            : new Typeface("Segoe UI");
+            ? selectedFont.CreateTypeface(BoldCheckBox.IsChecked == true, ItalicCheckBox.IsChecked == true)
+            : new InstalledFontFamily("Segoe UI", new FontFamily("Segoe UI"))
+                .CreateTypeface(BoldCheckBox.IsChecked == true, ItalicCheckBox.IsChecked == true);
     }
 
     private void SetEffectiveFontSize(double fontSizeDots)
@@ -412,7 +425,7 @@ public partial class MainWindow : Window
     {
         if (_previewRaster is not LabelRaster raster)
         {
-            EstimatedTapeUseTextBlock.Text = "Estimated tape use: 0.0 mm";
+            EstimatedTapeUseTextBlock.Text = "Estimated tape use: 0 mm";
             return;
         }
 
@@ -424,7 +437,7 @@ public partial class MainWindow : Window
 
         PrintTapeUseEstimate estimate = PrintTapeUseCalculator.Calculate(raster, options);
         EstimatedTapeUseTextBlock.Text =
-            $"Estimated tape use: {estimate.EstimatedCommandedMillimeters:F1} mm";
+            $"Estimated tape use: {LengthDisplayFormatter.FormatMillimeters(estimate.EstimatedCommandedMillimeters)}";
     }
 
     private static string FormatSinglePrintResult(

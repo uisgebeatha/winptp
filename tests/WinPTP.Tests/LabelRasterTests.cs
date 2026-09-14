@@ -67,6 +67,7 @@ public sealed class LabelRasterTests
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
+    [InlineData("\r\n \n\t")]
     public void Render_EmptyOrWhitespaceText_ThrowsPredictably(string text)
     {
         Assert.Throws<ArgumentException>(() => RenderOnStaThread(text));
@@ -277,17 +278,156 @@ public sealed class LabelRasterTests
             0.002);
     }
 
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, true, true)]
+    public void StyledAccentedText_FitsCompleteInk(bool bold, bool italic, bool underline)
+    {
+        InstalledFontFamily family = new("Segoe UI", new FontFamily("Segoe UI"));
+        Typeface face = family.CreateTypeface(bold, italic);
+        Assert.Equal(bold ? FontWeights.Bold : FontWeights.Normal, face.Weight);
+        Assert.Equal(italic ? FontStyles.Italic : FontStyles.Normal, face.Style);
+        TextLabelRenderResult rendered = RenderOnStaThread(
+            "ÁÉgjy Åç", typeface: face, underline: underline);
+        AssertFits(rendered.Raster);
+        Assert.Equal(128, rendered.Raster.DotsPerRasterLine);
+        Assert.Equal(rendered.Raster.RasterLineCount * 16, rendered.Raster.PackedData.Length);
+    }
+
+    [Fact]
+    public void BoldAndUnderline_ChangeThePrintedRaster()
+    {
+        var regular = RenderOnStaThread("Label", requestedFontSizeDots: 20);
+        var bold = RenderOnStaThread("Label",
+            typeface: new InstalledFontFamily("Segoe UI", new FontFamily("Segoe UI")).CreateTypeface(bold: true),
+            requestedFontSizeDots: 20);
+        var underlined = RenderOnStaThread("Label", requestedFontSizeDots: 20, underline: true);
+        Assert.NotEqual(regular.Raster.PackedData.ToArray(), bold.Raster.PackedData.ToArray());
+        Assert.True(BlackCount(underlined.Raster) > BlackCount(regular.Raster));
+        AssertFits(underlined.Raster);
+    }
+
+    [Fact]
+    public void InkSizing_UsesMoreHeightThanTheOldLineBoxFit()
+    {
+        var rendered = RenderOnStaThread("WinPTP Test");
+        double oldSize = RunOnStaThread(() =>
+        {
+            double size = 60;
+            while (new FormattedText("WinPTP Test", CultureInfo.CurrentUICulture,
+                FlowDirection.LeftToRight, new Typeface("Segoe UI"), size,
+                Brushes.Black, 1).Height > 60)
+            {
+                size -= 0.5;
+            }
+            return size;
+        });
+        Assert.True(rendered.SelectedFontSizeDots > oldSize * 1.2);
+        int[] rows = InkRows(rendered.Raster);
+        Assert.InRange(rows.Last() - rows.First() + 1, 55, 60);
+    }
+
+    [Theory]
+    [InlineData("First\nSecond")]
+    [InlineData("First\r\nSecond")]
+    [InlineData("Ágj\n\nÉpq")]
+    public void Multiline_AutoAndOversizedManualFitTheWholeBlock(string text)
+    {
+        var automatic = RenderOnStaThread(text, underline: true);
+        var manual = RenderOnStaThread(text, requestedFontSizeDots: 200, underline: true);
+        AssertFits(automatic.Raster);
+        AssertFits(manual.Raster);
+        Assert.Equal(automatic.SelectedFontSizeDots, manual.SelectedFontSizeDots);
+        Assert.Equal(automatic.Raster.PackedData.ToArray(), manual.Raster.PackedData.ToArray());
+    }
+
+    [Fact]
+    public void Multiline_PreservesBlankLineAndUsesWidestLine()
+    {
+        var single = RenderOnStaThread("MMMM", requestedFontSizeDots: 12);
+        var two = RenderOnStaThread("MMMM\nMMMM", requestedFontSizeDots: 12);
+        var blank = RenderOnStaThread("MMMM\n\nMMMM", requestedFontSizeDots: 12);
+        var concatenated = RenderOnStaThread("MMMMMMMM", requestedFontSizeDots: 12);
+        Assert.Equal(12, blank.SelectedFontSizeDots);
+        Assert.Equal(single.Raster.RasterLineCount, two.Raster.RasterLineCount);
+        Assert.True(two.Raster.RasterLineCount < concatenated.Raster.RasterLineCount);
+        Assert.Equal(2, RowGroups(two.Raster));
+        Assert.Equal(2, RowGroups(blank.Raster));
+        Assert.True(InkRows(blank.Raster).Last() - InkRows(blank.Raster).First()
+            > InkRows(two.Raster).Last() - InkRows(two.Raster).First() + 8);
+    }
+
+    [Theory]
+    [InlineData(31.1, "32 mm")]
+    [InlineData(31.9, "32 mm")]
+    [InlineData(32.0, "32 mm")]
+    [InlineData(0, "0 mm")]
+    public void LengthDisplay_RoundsUpOnlyForPresentation(double length, string expected)
+    {
+        Assert.Equal(expected, LengthDisplayFormatter.FormatMillimeters(length));
+    }
+
+    [Fact]
+    public void StyledMultilinePreview_PreservesEveryCachedRasterPixel()
+    {
+        LabelRaster raster = RenderOnStaThread("Ágj\nTest", underline: true,
+            typeface: new InstalledFontFamily("Segoe UI", new FontFamily("Segoe UI"))
+                .CreateTypeface(bold: true, italic: true)).Raster;
+        BitmapSource preview = LabelRasterPreviewConverter.ToBitmapSource(raster);
+        byte[] pixels = new byte[preview.PixelWidth * preview.PixelHeight];
+        preview.CopyPixels(pixels, preview.PixelWidth, 0);
+        for (int y = 0; y < preview.PixelHeight; y++)
+        {
+            for (int x = 0; x < preview.PixelWidth; x++)
+            {
+                Assert.Equal(raster.IsBlackPixel(x, y + LabelRasterPreviewConverter.PhysicalTapeTopHeadDot)
+                    ? (byte)0 : (byte)255, pixels[y * preview.PixelWidth + x]);
+            }
+        }
+    }
+
+    private static int[] InkRows(LabelRaster raster) =>
+        Enumerable.Range(0, 128).Where(y =>
+            Enumerable.Range(0, raster.RasterLineCount).Any(x => raster.IsBlackPixel(x, y))).ToArray();
+
+    private static int BlackCount(LabelRaster raster) =>
+        Enumerable.Range(0, 128).Sum(y =>
+            Enumerable.Range(0, raster.RasterLineCount).Count(x => raster.IsBlackPixel(x, y)));
+
+    private static int RowGroups(LabelRaster raster)
+    {
+        int[] rows = InkRows(raster);
+        return rows.Where((row, index) => index == 0 || row != rows[index - 1] + 1).Count();
+    }
+
+    private static void AssertFits(LabelRaster raster)
+    {
+        var layout = TextLabelLayout.TwelveMillimeter;
+        int[] rows = InkRows(raster);
+        Assert.NotEmpty(rows);
+        Assert.All(rows, y => Assert.InRange(y,
+            layout.TextAreaTopDot, layout.TextAreaTopDot + layout.TextAreaHeightDots - 1));
+    }
+
     private static TextLabelRenderResult RenderOnStaThread(
         string text,
         TextLabelLayout? layout = null,
         Typeface? typeface = null,
-        double? requestedFontSizeDots = null)
+        double? requestedFontSizeDots = null,
+        bool underline = false)
     {
         return RunOnStaThread(() => TextLabelRasterizer.Render(
             text,
             typeface ?? new Typeface("Segoe UI"),
             layout ?? TextLabelLayout.TwelveMillimeter,
-            requestedFontSizeDots));
+            requestedFontSizeDots,
+            underline));
     }
 
     private static T RunOnStaThread<T>(Func<T> action)
